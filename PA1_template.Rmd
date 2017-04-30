@@ -6,99 +6,154 @@ output:
     keep_md: true
 ---
 
+```{r global_options, include=FALSE}
+knitr::opts_chunk$set(message=FALSE)
+```
+
 
 ## Loading and preprocessing the data
 
-```{r}
+```{r load_data}
 x <- {
-
-  dataFile <- "activity.csv"
-  if (!file.exists(dataFile)) {
-    unzip("activity.zip")
-  }
-
-  read.csv(dataFile)
+  data.file <- "activity.csv"
+  if (!file.exists(data.file)) { unzip("activity.zip") }
+  read.csv(data.file)
 }
 ```
 
 
 ## What is mean total number of steps taken per day?
-
-```{r}
+  
+```{r steps_per_day}
 require("lattice")
-with(aggregate(steps ~ date, x, sum), {
-  print(histogram(steps, xlab = "Daily steps"))
-  summary(steps)
+steps.per.day <- with(aggregate(steps ~ date, x, sum), {
+  list(
+    plot = histogram(steps, xlab = "Daily steps"),
+    mean = mean(steps, na.rm = TRUE),
+    median = median(steps, na.rm = TRUE),
+    examples = length(steps)
+  )
 })
 ```
 
+Following is the total number of daily steps as a histogram. The `steps` data
+comprises around `r sprintf("%.0f%%", 100 * mean(is.na(x$steps)))` and any day
+with incomplete data is omitted from this distribution.
+
+```{r steps_per_day_plot}
+print(steps.per.day$plot)
+```
+
+The distribution of total daily steps has a mean of
+`r sprintf("%.1f", steps.per.day$mean)` and a median of
+`r steps.per.day$median`.
 
 ## What is the average daily activity pattern?
 
-```{r}
+```{r average_daily_pattern}
 require("lattice")
-max_interval <- with(aggregate(steps ~ interval, x, mean), {
-  print(xyplot(
-    steps ~ interval,
-    type = "l",
-    xlab = "5-min interval", ylab = "Steps"))
-  interval[which.max(steps)]
+average.daily.pattern <- with(aggregate(steps ~ interval, x, mean), {
+  list(
+    plot = xyplot(
+      steps ~ interval,
+      type = "l",
+      xlab = "5-min interval", ylab = "Average steps"),
+    max.interval = interval[which.max(steps)]
+  )
 })
 ```
 
-The maximum interval is `r max_interval`.
+Below is the average number of steps that occurs at each 5-minute interval,
+which represents the daily average activity profile.
 
+```{r average_daily_pattern_plot}
+print(average.daily.pattern$plot)
+```
+
+The maximum average daily activity corresponds to the `interval` value
+`r average.daily.pattern$max.interval`. This presumably corresponds to the
+period 8:35AM to 8:40AM and a morning commute.
 
 ## Imputing missing values
 
-Use MICE (Multivariate Imputation by Chained Equations)
-[see @JSSv045i03, pp. 7-15].
+Use MICE [@JSSv045i03, pp. 7-15] to perform the imputation, based entirely on
+the `interval` value.
 
-```{r}
+```{r imputation}
 require("mice")
 require("lattice")
 imputed <- {
-
   imp <- mice(
       x, seed = 400,
       predictorMatrix = matrix(c(0, 0, 0, 0, 0, 0, 1, 0, 0), nrow = 3),
       print = FALSE)
-  summary(imp)
-  print(xyplot(imp, steps ~ interval | .imp, pch = 20, cex = 1.4))
-  list(imp = imp, complete = complete(imp))
+  list(
+    plot.vs.obs = xyplot(
+      imp,
+      steps ~ interval | .imp,
+      pch = 20, cex = 1.4,
+      xlab = "Interval", ylab = "Steps"),
+    complete = complete(imp))
 }
 ```
 
-Histogram using complete dataset.
+To check that the imputation gives realistic values, the following shows the
+distribution of observed and imputed data across five imputations.
 
-```{r}
+```{r imputation_vs_obs}
+print(imputed$plot.vs.obs)
+```
+
+The suggests that the imputation is sensible. Based on the complete data (with
+imputed values), the following shows the total number of daily steps as a
+histogram.
+
+```{r complete_steps_per_day}
 require("lattice")
-with(aggregate(steps ~ date, imputed$complete, sum), {
+complete.steps.per.day <- with(aggregate(steps ~ date, imputed$complete, sum), {
   print(histogram(steps, xlab = "Daily steps"))
-  summary(steps)
+  list(
+    mean = mean(steps),
+    median = median(steps),
+    examples = length(steps)
+  )
 })
 ```
 
-What is the impact of imputing data on the total daily number of steps?
+With imputed values, the distribution of total daily steps has a mean of
+`r sprintf("%.1f", complete.steps.per.day$mean)` and a median of
+`r complete.steps.per.day$median`.
 
-```{r}
+To look at the  impact of imputing data on the total daily number of steps, the
+following shows the distributions of observed and complete (with imputation)
+total daily steps.
+
+```{r steps_per_day_obs_vs_comp}
 require("lattice")
-merged <- rbind(
-    cbind(x, source = "observed"),
-    cbind(imputed$complete, source = "complete"))
 with(
-  aggregate(steps ~ date + source, merged, sum),
-  print(bwplot(steps ~ source))
+  aggregate(
+    steps ~ date + source,
+    rbind(
+      cbind(x, source = "Observed"),
+      cbind(imputed$complete, source = "Complete")),
+    sum),
+  print(bwplot(steps ~ source, ylab = "Daily steps"))
 )
 ```
 
+The above analysis shows that whilst the number of daily totals using imputed
+data is `r complete.steps.per.day$examples` rather than
+`r steps.per.day$examples` based only on observed data, the distribution of
+these examples remains basically unchanged. This is exactly that we would hope.
 
 ## Are there differences in activity patterns between weekdays and weekends?
 
-```{r}
-require("lattice")
-dow <- {
+The following plot shows the respective average daily activity profile for
+weekdays and weekend-days.
 
+```{r dow_comparison}
+require("lattice")
+{
   is_weekend <- function(date) { weekdays(date) %in% c("Saturday", "Sunday") }
   complete <- cbind(
       imputed$complete,
@@ -116,5 +171,9 @@ dow <- {
 }
 ```
 
+The above activity profiles are averaged over a relatively small sample of days
+and so are subject to noise, but a more-peaky distribution can be seen on a
+weekday. Although the weekend profile still has a comparably peak in the
+morning, the distribution is generally flatter and less well defined.
 
 # References
