@@ -72,9 +72,21 @@ print(average.daily.pattern$plot)
 
 The maximum average daily activity corresponds to the `interval` value
 `r average.daily.pattern$max.interval`. This presumably corresponds to the
-period 8:35AM to 8:40AM and a morning commute.
+period 8:35AM to 8:40AM and to a morning commute.
 
 ## Imputing missing values
+
+```{r imputation_missing_values, results = 'asis'}
+require("mice")
+require("knitr")
+missing.values <- md.pattern(x)
+kable(missing.values)
+```
+
+The above table shows that the only column that contains missing data is
+`steps`. This results in `r missing.values[9]` incomplete observations, which
+represents about `r sprintf("%.0f%%", 100 * mean(is.na(x$steps)))` of the total
+observations.
 
 Use MICE [@JSSv045i03, pp. 7-15] to perform the imputation, based entirely on
 the `interval` value.
@@ -122,7 +134,8 @@ complete.steps.per.day <- with(aggregate(steps ~ date, imputed$complete, sum), {
 
 With imputed values, the distribution of total daily steps has a mean of
 `r sprintf("%.1f", complete.steps.per.day$mean)` and a median of
-`r complete.steps.per.day$median`.
+`r complete.steps.per.day$median`. There is no significant difference between
+these values and those that were calculated based only on observed data.
 
 To look at the  impact of imputing data on the total daily number of steps, the
 following shows the distributions of observed and complete (with imputation)
