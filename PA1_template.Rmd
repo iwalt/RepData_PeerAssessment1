@@ -1,5 +1,6 @@
 ---
 title: "Reproducible Research: Peer Assessment 1"
+bibliography: bibliography.bibtex
 output: 
   html_document:
     keep_md: true
@@ -8,18 +9,112 @@ output:
 
 ## Loading and preprocessing the data
 
+```{r}
+x <- {
+
+  dataFile <- "activity.csv"
+  if (!file.exists(dataFile)) {
+    unzip("activity.zip")
+  }
+
+  read.csv(dataFile)
+}
+```
 
 
 ## What is mean total number of steps taken per day?
 
+```{r}
+require("lattice")
+with(aggregate(steps ~ date, x, sum), {
+  print(histogram(steps, xlab = "Daily steps"))
+  summary(steps)
+})
+```
 
 
 ## What is the average daily activity pattern?
 
+```{r}
+require("lattice")
+max_interval <- with(aggregate(steps ~ interval, x, mean), {
+  print(xyplot(
+    steps ~ interval,
+    type = "l",
+    xlab = "5-min interval", ylab = "Steps"))
+  interval[which.max(steps)]
+})
+```
+
+The maximum interval is `r max_interval`.
 
 
 ## Imputing missing values
 
+Use MICE (Multivariate Imputation by Chained Equations)
+[see @JSSv045i03, pp. 7-15].
+
+```{r}
+require("mice")
+require("lattice")
+imputed <- {
+
+  imp <- mice(
+      x, seed = 400,
+      predictorMatrix = matrix(c(0, 0, 0, 0, 0, 0, 1, 0, 0), nrow = 3),
+      print = FALSE)
+  summary(imp)
+  print(xyplot(imp, steps ~ interval | .imp, pch = 20, cex = 1.4))
+  list(imp = imp, complete = complete(imp))
+}
+```
+
+Histogram using complete dataset.
+
+```{r}
+require("lattice")
+with(aggregate(steps ~ date, imputed$complete, sum), {
+  print(histogram(steps, xlab = "Daily steps"))
+  summary(steps)
+})
+```
+
+What is the impact of imputing data on the total daily number of steps?
+
+```{r}
+require("lattice")
+merged <- rbind(
+    cbind(x, source = "observed"),
+    cbind(imputed$complete, source = "complete"))
+with(
+  aggregate(steps ~ date + source, merged, sum),
+  print(bwplot(steps ~ source))
+)
+```
 
 
 ## Are there differences in activity patterns between weekdays and weekends?
+
+```{r}
+require("lattice")
+dow <- {
+
+  is_weekend <- function(date) { weekdays(date) %in% c("Saturday", "Sunday") }
+  complete <- cbind(
+      imputed$complete,
+      day = ifelse(
+        is_weekend(as.Date(imputed$complete$date, format = "%Y-%m-%d")),
+        "Weekend", "Weekday"))
+
+  with(aggregate(steps ~ interval + day, complete, mean), {
+    print(xyplot(
+      steps ~ interval | day,
+      type = "l",
+      layout = c(1, 2),
+      xlab = "5-min interval", ylab = "Number of steps"))
+  })
+}
+```
+
+
+# References
